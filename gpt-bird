@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy Bird Clone</title>
+    <style>
+        /* Stili di base */
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background-color: #70c5ce;
+            border: 10px solid black; /* Aggiunto bordo nero */
+        }
+
+        canvas {
+            display: block;
+            margin: 0 auto;
+            background-color: #70c5ce;
+        }
+
+        .score {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 36px;
+            color: white;
+            font-weight: bold;
+        }
+
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            color: white;
+            font-weight: bold;
+            text-align: center;
+            display: none;
+        }
+
+        .game-over button {
+            padding: 15px;
+            font-size: 20px;
+            background-color: #ff6347;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 20px;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .game-over button:hover {
+            background-color: #ff4500;
+        }
+
+        /* Stili per la schermata iniziale */
+        .home-page {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .home-page h1 {
+            font-size: 48px;
+            color: white;
+            margin-bottom: 20px;
+        }
+
+        .home-page button {
+            padding: 15px 30px;
+            font-size: 20px;
+            background-color: #ff6347;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .home-page button:hover {
+            background-color: #ff4500;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="home-page" id="homePage">
+        <h1>Benvenuto in Flappy Bird</h1>
+        <button onclick="startGame()">Gioca</button>
+    </div>
+
+    <canvas id="gameCanvas" style="display: none;"></canvas>
+    <div class="score" id="score" style="display: none;">Score: 0</div>
+    <div class="game-over" id="gameOver">
+        Game Over<br>
+        <button onclick="restartGame()">Restart</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const gameOverElement = document.getElementById('gameOver');
+        const homePage = document.getElementById('homePage');
+
+        canvas.width = 400;
+        canvas.height = 600;
+
+        const GRAVITY = 0.4; // Aumento della gravità
+        const FLAP = -6.0; // Aumento della spinta (più negativo)
+        const SPAWN_RATE = 180; // Distanza maggiore tra i tubi
+        const PIPE_WIDTH = 50;
+        const PIPE_SPACING = 250; // Distanza tra tubi
+        const PIPE_HEIGHT = 300;
+
+        let bird = {
+            x: 50,
+            y: canvas.height / 2,
+            radius: 15,  // Forma rotonda
+            velocity: 0
+        };
+
+        let pipes = [];
+        let score = 0;
+        let gameOver = false;
+        let clouds = []; // Array per le nuvole
+        let mountains = []; // Array per le montagne
+        let gameStarted = false;
+
+        // Disegnare l'uccellino (forma rotonda con occhi, becco e ali)
+        function drawBird() {
+            bird.velocity += GRAVITY;
+            bird.y += bird.velocity;
+
+            if (bird.y + bird.radius * 2 >= canvas.height) {
+                gameOver = true;
+            }
+
+            // Corpo dell'uccellino (cerchio)
+            ctx.fillStyle = '#ff0';
+            ctx.beginPath();
+            ctx.arc(bird.x, bird.y, bird.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Occhi dell'uccellino (due cerchi neri)
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(bird.x - 6, bird.y - 6, 3, 0, Math.PI * 2);
+            ctx.arc(bird.x + 6, bird.y - 6, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Becco dell'uccellino (triangolo giallo scuro)
+            ctx.fillStyle = '#b8860b';
+            ctx.beginPath();
+            ctx.moveTo(bird.x, bird.y + 5);
+            ctx.lineTo(bird.x - 8, bird.y + 12);
+            ctx.lineTo(bird.x + 8, bird.y + 12);
+            ctx.fill();
+
+            // Ali dell'uccellino (due piccoli triangoli bianchi)
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.moveTo(bird.x - 12, bird.y - 5);
+            ctx.lineTo(bird.x - 25, bird.y - 15);
+            ctx.lineTo(bird.x - 12, bird.y - 20);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(bird.x + 12, bird.y - 5);
+            ctx.lineTo(bird.x + 25, bird.y - 15);
+            ctx.lineTo(bird.x + 12, bird.y - 20);
+            ctx.fill();
+        }
+
+        // Disegnare i tubi (completamente verdi)
+        function drawPipes() {
+            if (pipes.length === 0 || pipes[pipes.length - 1].x < canvas.width - SPAWN_RATE) {
+                const pipeHeight = Math.random() * (canvas.height - PIPE_SPACING);
+                pipes.push({
+                    x: canvas.width,
+                    topHeight: pipeHeight,
+                    bottomHeight: canvas.height - pipeHeight - PIPE_SPACING
+                });
+            }
+
+            pipes.forEach((pipe, index) => {
+                pipe.x -= 5; // Velocità aumentata da 3 a 5 per i tubi
+
+                // Disegnare il tubo superiore (completamente verde)
+                ctx.fillStyle = '#008000'; // Verde uniforme
+                ctx.fillRect(pipe.x, 0, PIPE_WIDTH, pipe.topHeight);
+
+                // Disegnare il tubo inferiore (completamente verde)
+                ctx.fillRect(pipe.x, canvas.height - pipe.bottomHeight, PIPE_WIDTH, pipe.bottomHeight);
+
+                if (pipe.x + PIPE_WIDTH < 0) {
+                    pipes.splice(index, 1);
+                    score++;
+                    scoreElement.innerText = `Score: ${score}`;
+                }
+
+                if (
+                    bird.x + bird.radius * 2 > pipe.x &&
+                    bird.x - bird.radius < pipe.x + PIPE_WIDTH &&
+                    (bird.y - bird.radius < pipe.topHeight || bird.y + bird.radius > canvas.height - pipe.bottomHeight)
+                ) {
+                    gameOver = true;
+                }
+            });
+        }
+
+        // Disegnare le nuvole
+        function drawClouds() {
+            if (clouds.length < 5) {
+                clouds.push({
+                    x: canvas.width,
+                    y: Math.random() * 100 + 50,
+                    size: Math.random() * 30 + 50
+                });
+            }
+
+            clouds.forEach((cloud, index) => {
+                cloud.x -= 0.5; // Velocità di spostamento delle nuvole
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(cloud.x, cloud.y, cloud.size, 0, Math.PI * 2);
+                ctx.arc(cloud.x + cloud.size, cloud.y, cloud.size, 0, Math.PI * 2);
+                ctx.arc(cloud.x + cloud.size / 2, cloud.y - cloud.size / 1.5, cloud.size, 0, Math.PI * 2);
+                ctx.fill();
+
+                if (cloud.x + cloud.size < 0) {
+                    clouds.splice(index, 1);
+                }
+            });
+        }
+
+        // Disegnare le montagne con punta innevata
+        function drawMountains() {
+            mountains.forEach((mountain, index) => {
+                mountain.x -= 1; // Velocità aumentata da 0.4 a 1 per le montagne
+                ctx.fillStyle = '#2f4f4f'; // Colore delle montagne
+                ctx.beginPath();
+                ctx.moveTo(mountain.x, canvas.height - 50);
+                ctx.lineTo(mountain.x + 100, canvas.height - 150); // Punta innevata
+                ctx.lineTo(mountain.x + 200, canvas.height - 50);
+                ctx.closePath();
+                ctx.fill();
+
+                if (mountain.x + 200 < 0) {
+                    mountains.splice(index, 1);
+                }
+            });
+        }
+
+        // Aggiungere nuove montagne
+        function spawnMountains() {
+            if (mountains.length < 3 || mountains[mountains.length - 1].x < canvas.width - 300) {
+                mountains.push({
+                    x: canvas.width,
+                });
+            }
+        }
+
+        // Gestire il volo dell'uccellino
+        function flap() {
+            if (!gameOver) {
+                bird.velocity = FLAP;
+            }
+        }
+
+        // Ciclo di gioco
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawMountains(); // Disegnare le montagne
+            drawClouds(); // Disegnare le nuvole
+            if (gameOver) {
+                gameOverElement.style.display = 'block';
+                return;
+            }
+
+            drawBird();
+            drawPipes();
+            spawnMountains(); // Aggiungere nuove montagne
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Riavviare il gioco
+        function restartGame() {
+            bird.y = canvas.height / 2;
+            bird.velocity = 0;
+            pipes = [];
+            score = 0;
+            scoreElement.innerText = `Score: 0`;
+            gameOver = false;
+            gameOverElement.style.display = 'none';
+            mountains = []; // Riavviare le montagne
+            gameLoop();
+        }
+
+        // Avviare il gioco
+        function startGame() {
+            homePage.style.display = 'none'; // Nascondere la schermata iniziale
+            canvas.style.display = 'block'; // Mostrare il canvas
+            scoreElement.style.display = 'block'; // Mostrare il punteggio
+            gameStarted = true; // Segnala che il gioco è iniziato
+            gameLoop();
+        }
+
+        // Event listener per il volo
+        document.addEventListener('keydown', function(e) {
+            if (e.key === ' ' || e.key === 'ArrowUp') {
+                flap();
+            }
+        });
+
+    </script>
+</body>
+</html>
